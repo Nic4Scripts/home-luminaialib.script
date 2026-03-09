@@ -1,17 +1,18 @@
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    "The 12-Pillar External Apex"
-    Part 1: Core Engine & Master Pulse
+    LUMINAIA UI FRAMEWORK v1.1 [PREMIUM EDITION]
+    Optimized for LX63 (100% UNC)
+    
+    Part 1: Core Engine, Signals, and Theme Controller
 --]]
 
 local Luminaia = {
     Windows = {},
     Flags = {},
-    Toggled = true,
-    Accent = Color3.fromRGB(255, 255, 255),
-    User = "User",
-    Notifications = {},
-    Registry = {}
+    Toggled = false, -- STARTS CLOSED (HIDDEN)
+    User = "Prizmm",
+    Accent = Color3.fromRGB(255, 100, 200), -- Blossom Pink Default
+    Registry = {},
+    Signals = {}
 }
 
 -- [[ SERVICES ]] --
@@ -19,11 +20,34 @@ local UIS = game:GetService("UserInputService")
 local RS = game:GetService("RunService")
 local TS = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
+local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
 
--- [[ DRAWING API WRAPPER ]] --
+-- [[ INTERNAL SIGNAL API ]] --
+-- Replaces standard Luau events for 0-latency execution
+function Luminaia:Connect(name, callback)
+    self.Signals[name] = self.Signals[name] or {}
+    table.insert(self.Signals[name], callback)
+end
+
+function Luminaia:Fire(name, ...)
+    if self.Signals[name] then
+        for _, cb in pairs(self.Signals[name]) do
+            task.spawn(cb, ...)
+        end
+    end
+end
+
+-- [[ THEME CONTROLLER ]] --
+-- Handles the "Pulsing" and "Glowing" effects globally
+local Theme = {
+    Main = Color3.fromRGB(12, 12, 12),
+    Outline = Color3.fromRGB(45, 45, 45),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDark = Color3.fromRGB(160, 160, 160)
+}
+
+-- [[ DRAWING WRAPPER ]] --
+-- High-performance object creation
 local function Draw(type, props)
     local obj = Drawing.new(type)
     for i, v in pairs(props) do
@@ -31,228 +55,159 @@ local function Draw(type, props)
     end
     return obj
 end
+Luminaia.Draw = Draw -- Export for other parts
 
--- [[ BLUR SYSTEM ]] --
-local Blur = Lighting:FindFirstChild("LuminaiaBlur") or Instance.new("BlurEffect")
-Blur.Name = "LuminaiaBlur"
-Blur.Size = 20
-Blur.Enabled = true
-Blur.Parent = Lighting
+-- [[ BLUR CONTROLLER ]] --
+local MenuBlur = Lighting:FindFirstChild("LuminaiaBlur") or Instance.new("BlurEffect")
+MenuBlur.Name = "LuminaiaBlur"
+MenuBlur.Size = 0
+MenuBlur.Enabled = false
+MenuBlur.Parent = Lighting
 
--- [[ WATERMARK SYSTEM ]] --
+-- [[ WATERMARK & HUD ]] --
 local Watermark = Draw("Text", {
     Text = "LUMINAIA",
-    Size = 28,
-    Position = Vector2.new(25, 25),
+    Size = 38,
+    Position = Vector2.new(30, 30),
     Visible = true,
     Outline = true,
-    ZIndex = 100
+    ZIndex = 2000,
+    Font = 2 -- BOLD
 })
 
-local WatermarkGlow = Draw("Text", {
-    Text = "LUMINAIA",
-    Size = 28,
-    Position = Vector2.new(25, 25),
-    Visible = true,
-    Outline = true,
-    Transparency = 0.5,
-    ZIndex = 99
-})
-
--- [[ MASTER NOTIFICATION SYSTEM ]] --
-function Luminaia:Notify(msg)
-    task.spawn(function()
-        local Screen = workspace.CurrentCamera.ViewportSize
-        local Box = Draw("Square", {
-            Size = Vector2.new(290, 70),
-            Position = Vector2.new(Screen.X - 310, Screen.Y + 100),
-            Color = Color3.fromRGB(8, 8, 8),
-            Filled = true,
-            Visible = true,
-            Thickness = 1,
-            Transparency = 1
-        })
-        
-        local AccentBar = Draw("Square", {
-            Size = Vector2.new(2, 70),
-            Position = Box.Position,
-            Color = self.Accent,
-            Filled = true,
-            Visible = true
-        })
-
-        local Title = Draw("Text", {
-            Text = "LUMINAIA",
-            Size = 18,
-            Color = Color3.new(1, 1, 1),
-            Position = Box.Position + Vector2.new(15, 10),
-            Visible = true,
-            Outline = true
-        })
-
-        local Content = Draw("Text", {
-            Text = msg .. "\nmade by prizmm, @" .. self.User .. " daddy :3",
-            Size = 14,
-            Color = Color3.fromRGB(180, 180, 180),
-            Position = Box.Position + Vector2.new(15, 32),
-            Visible = true
-        })
-
-        -- Slide Up Animation
-        local startTick = tick()
-        local duration = 0.6
-        local targetY = Screen.Y - 90
-        
-        while tick() - startTick < duration do
-            local t = (tick() - startTick) / duration
-            local ease = 1 - math.pow(1 - t, 4) -- Quantic Out
-            local currentY = (Screen.Y + 100) - ((Screen.Y + 100 - targetY) * ease)
-            
-            Box.Position = Vector2.new(Box.Position.X, currentY)
-            AccentBar.Position = Box.Position
-            Title.Position = Box.Position + Vector2.new(15, 10)
-            Content.Position = Box.Position + Vector2.new(15, 32)
-            RS.RenderStepped:Wait()
-        end
-
-        task.wait(5)
-
-        -- Fade Out
-        for i = 1, 0, -0.05 do
-            Box.Transparency = i
-            AccentBar.Transparency = i
-            Title.Transparency = i
-            Content.Transparency = i
-            task.wait(0.02)
-        end
-        
-        Box:Remove() AccentBar:Remove() Title:Remove() Content:Remove()
-    end)
-end
-
--- [[ THE MASTER PULSE LOOP ]] --
+-- Dynamic Pulsing Logic
 RS.RenderStepped:Connect(function()
-    local pulse = (math.sin(tick() * 4) + 1) / 2
-    local color = Color3.new(pulse, pulse, pulse)
-    
-    Watermark.Color = color
-    WatermarkGlow.Color = color
-    WatermarkGlow.Transparency = 0.3 * pulse
-    
-    -- Handle Blur Toggle
-    Blur.Enabled = Luminaia.Toggled
+    if Watermark.Visible then
+        local Pulse = (math.sin(tick() * 3) + 1) / 2
+        local Color = Color3.new(
+            Luminaia.Accent.R * Pulse, 
+            Luminaia.Accent.G * Pulse, 
+            Luminaia.Accent.B * Pulse
+        )
+        Watermark.Color = Color
+    end
 end)
 
--- [[ INPUT TOGGLE HANDLER ]] --
-UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
-        Luminaia.Toggled = not Luminaia.Toggled
-        for _, win in pairs(Luminaia.Windows) do
-            win:SetVisible(Luminaia.Toggled)
-        end
+-- [[ MASTER TOGGLE LOGIC ]] --
+function Luminaia:ToggleUI()
+    self.Toggled = not self.Toggled
+    
+    -- Blur Logic: Only on when UI is open
+    MenuBlur.Enabled = self.Toggled
+    local TargetBlur = self.Toggled and 22 or 0
+    TS:Create(MenuBlur, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Size = TargetBlur}):Play()
+    
+    -- Fire visibility to all windows (Part 2 logic)
+    self:Fire("OnToggle", self.Toggled)
+    
+    -- Mouse Unlock
+    UIS.MouseIconEnabled = not self.Toggled
+end
+
+UIS.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        Luminaia:ToggleUI()
     end
 end)
 
 -- [ END OF PART 1 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 2: The Window Constructor & Column Math
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 2: Window Constructor, Pillar Math & Dragging Logic
 --]]
 
--- [[ WINDOW CLASS ]] --
 function Luminaia:CreateWindow(name)
     local Window = {
         Title = name,
         Elements = {},
-        Active = true,
-        Visible = true,
-        YOffset = 35, -- Start drawing elements below header
-        CurrentDropdown = nil
+        Visible = false, -- STARTS HIDDEN
+        YOffset = 42,    -- Start drawing elements lower
+        Dragging = false,
+        DragOffset = Vector2.new(0, 0)
     }
 
     local Screen = workspace.CurrentCamera.ViewportSize
-    local Index = #self.Windows -- Which window is this? (0-11)
+    local Index = #self.Windows
     
-    -- [[ 12-PILLAR MATH: 6 PER ROW ]] --
+    -- [[ 12-PILLAR GRID MATH ]] --
+    -- 6 Columns per Row | 110px spacing (Wider than before)
     local Col = Index % 6
     local Row = math.floor(Index / 6)
+    local SpacingX = 110 
+    local TotalWidth = (6 * 90) + (5 * 20)
     
-    -- 90px width + 15px padding = 105px per slot
-    local SpacingX = 105 
-    local TotalWidth = (6 * 90) + (5 * 15)
-    
-    -- Start position for the grid
     local StartX = (Screen.X / 2) - (TotalWidth / 2) + (Col * SpacingX)
-    local StartY = (Screen.Y / 2) - (Row == 0 and 510 or -10) -- Centered vertically
+    local StartY = (Screen.Y / 2) - (Row == 0 and 520 or -20)
 
-    -- [[ THE 1000PX PILLAR ]] --
-    local MainFrame = Draw("Square", {
-        Size = Vector2.new(90, 1000),
+    -- [[ THE 1000PX PILLAR BASE ]] --
+    local MainFrame = self.Draw("Square", {
+        Size = Vector2.new(95, 1000), -- Slightly wider (95px)
         Position = Vector2.new(StartX, StartY),
-        Color = Color3.fromRGB(12, 12, 12),
+        Color = Color3.fromRGB(10, 10, 10),
         Filled = true,
-        Visible = true,
-        Transparency = 0.85,
-        ZIndex = 1
+        Visible = false,
+        Transparency = 0.9,
+        ZIndex = 10
     })
 
-    local MainOutline = Draw("Square", {
-        Size = Vector2.new(90, 1000),
+    local MainOutline = self.Draw("Square", {
+        Size = MainFrame.Size,
         Position = MainFrame.Position,
-        Color = Color3.fromRGB(40, 40, 40),
+        Color = Color3.fromRGB(35, 35, 35),
         Filled = false,
-        Visible = true,
+        Visible = false,
         Thickness = 1,
-        Transparency = 0.4,
-        ZIndex = 2
+        Transparency = 0.5,
+        ZIndex = 11
     })
 
-    -- [[ THE HEADER ]] --
-    local Header = Draw("Square", {
-        Size = Vector2.new(90, 25),
+    -- [[ THE HEADER (BOLD & SHIFTED) ]] --
+    local Header = self.Draw("Square", {
+        Size = Vector2.new(95, 35), -- Taller header for bold text
         Position = MainFrame.Position,
-        Color = Color3.fromRGB(22, 22, 22),
+        Color = Color3.fromRGB(18, 18, 18),
         Filled = true,
-        Visible = true,
-        ZIndex = 3
+        Visible = false,
+        ZIndex = 12
     })
 
-    local HeaderLine = Draw("Square", {
-        Size = Vector2.new(90, 2),
-        Position = Header.Position + Vector2.new(0, 23),
+    local HeaderAccent = self.Draw("Square", {
+        Size = Vector2.new(95, 2),
+        Position = Header.Position + Vector2.new(0, 33),
         Color = self.Accent,
         Filled = true,
-        Visible = true,
-        ZIndex = 4
+        Visible = false,
+        ZIndex = 13
     })
 
-    local TitleText = Draw("Text", {
+    -- WIDER / BOLD / LOWERED TEXT
+    local TitleText = self.Draw("Text", {
         Text = name:upper(),
-        Size = 13,
+        Size = 15, -- Bigger font
         Center = true,
-        Position = Header.Position + Vector2.new(45, 6),
-        Visible = true,
+        Position = Header.Position + Vector2.new(47, 10), -- Shifted DOWN (10px)
+        Visible = false,
         Color = Color3.new(1, 1, 1),
         Outline = true,
-        ZIndex = 5
+        Font = 2, -- BOLD/MONOSPACE
+        ZIndex = 14
     })
 
-    -- Store drawing objects for visibility toggling
     Window.Drawings = {
         Main = MainFrame,
         Outline = MainOutline,
         Header = Header,
-        Line = HeaderLine,
+        Accent = HeaderAccent,
         Title = TitleText
     }
 
-    -- [[ VISIBILITY HANDLER ]] --
+    -- [[ VISIBILITY TOGGLE ]] --
     function Window:SetVisible(state)
         self.Visible = state
-        for _, drawObj in pairs(self.Drawings) do
-            drawObj.Visible = state
+        for _, draw in pairs(self.Drawings) do
+            draw.Visible = state
         end
-        -- Toggle all elements within this window
+        -- Toggle all buttons/toggles inside
         for _, element in pairs(self.Elements) do
             for _, edraw in pairs(element.Drawings) do
                 edraw.Visible = state
@@ -260,76 +215,131 @@ function Luminaia:CreateWindow(name)
         end
     end
 
-    -- [[ CLEANUP/SPACE HANDLER ]] --
-    -- Ensures only one dropdown/tab is open per pillar to keep it CLEAN
-    function Window:ManageSpace(newElement)
-        if self.CurrentDropdown and self.CurrentDropdown ~= newElement then
-            self.CurrentDropdown:Close()
-        end
-        self.CurrentDropdown = newElement
-    end
+    -- [[ SMOOTH DRAGGING LOGIC ]] --
+    -- Allows you to move the 1000px pillars around the screen
+    RS.RenderStepped:Connect(function()
+        if Window.Dragging and Luminaia.Toggled then
+            local MousePos = UIS:GetMouseLocation()
+            local NewPos = MousePos - Window.DragOffset
+            
+            -- Move Main Pillar
+            local Delta = NewPos - MainFrame.Position
+            MainFrame.Position = NewPos
+            MainOutline.Position = NewPos
+            Header.Position = NewPos
+            HeaderAccent.Position = Header.Position + Vector2.new(0, 33)
+            TitleText.Position = Header.Position + Vector2.new(47, 10)
 
-    -- [[ ADD TO REGISTRY ]] --
-    table.insert(self.Windows, Window)
+            -- Move all elements inside the pillar
+            for _, element in pairs(Window.Elements) do
+                for _, edraw in pairs(element.Drawings) do
+                    edraw.Position = edraw.Position + Delta
+                end
+            end
+        end
+    end)
+
+    UIS.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and Window.Visible then
+            local MousePos = UIS:GetMouseLocation()
+            -- Check if clicking the Header
+            if MousePos.X >= Header.Position.X and MousePos.X <= Header.Position.X + Header.Size.X then
+                if MousePos.Y >= Header.Position.Y and MousePos.Y <= Header.Position.Y + Header.Size.Y then
+                    Window.Dragging = true
+                    Window.DragOffset = MousePos - Header.Position
+                end
+            end
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            Window.Dragging = false
+        end
+    end)
+
+    -- [[ REGISTER WINDOW ]] --
+    table.insert(Luminaia.Windows, Window)
     return Window
 end
 
 -- [ END OF PART 2 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 3: Interaction Elements (Toggles & Buttons)
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 3: Interactive Elements with Hover & Glow Logic
 --]]
 
--- [[ UTILS: MOUSE CHECK ]] --
-local function MouseOver(pos, size)
-    local MousePos = UIS:GetMouseLocation()
-    return MousePos.X >= pos.X and MousePos.X <= pos.X + size.X and MousePos.Y >= pos.Y and MousePos.Y <= pos.Y + size.Y
+-- [[ UTILS: MOUSE COLLISION ]] --
+local function GetMousePos()
+    return UIS:GetMouseLocation()
+end
+
+local function IsMouseOver(pos, size)
+    local m = GetMousePos()
+    return m.X >= pos.X and m.X <= pos.X + size.X and m.Y >= pos.Y and m.Y <= pos.Y + size.Y
 end
 
 -- [[ TOGGLE COMPONENT ]] --
 function Window:AddToggle(text, flag, default, callback)
     local Toggle = {
         State = default or false,
-        Drawings = {}
+        Drawings = {},
+        Hovering = false
     }
     
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
     local XPos = self.Drawings.Main.Position.X
     
-    -- Toggle Background
-    local ToggleText = Draw("Text", {
+    -- Main Label (Shifted slightly for padding)
+    local Label = Luminaia.Draw("Text", {
         Text = text,
         Size = 13,
-        Color = Color3.fromRGB(200, 200, 200),
-        Position = Vector2.new(XPos + 8, YPos),
-        Visible = true,
+        Color = Color3.fromRGB(180, 180, 180),
+        Position = Vector2.new(XPos + 10, YPos),
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 15
     })
     
-    -- Status Indicator (Linoria Style [ON/OFF])
-    local Status = Draw("Text", {
+    -- Status Marker (The [+] or [-] with Glow)
+    local Indicator = Luminaia.Draw("Text", {
         Text = Toggle.State and "[+]" or "[-]",
         Size = 13,
         Color = Toggle.State and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 50),
-        Position = Vector2.new(XPos + 70, YPos),
-        Visible = true,
+        Position = Vector2.new(XPos + 72, YPos),
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 16
     })
 
-    Toggle.Drawings = {ToggleText, Status}
-    
-    -- Input Logic
+    Toggle.Drawings = {Label, Indicator}
+    Luminaia.Flags[flag] = Toggle.State
+
+    -- [[ INTERACTION LOOP ]] --
+    RS.RenderStepped:Connect(function()
+        if not Luminaia.Toggled or not self.Visible then return end
+        
+        local Hover = IsMouseOver(Vector2.new(XPos, YPos), Vector2.new(95, 16))
+        if Hover ~= Toggle.Hovering then
+            Toggle.Hovering = Hover
+            TS:Create(Label, TweenInfo.new(0.2), {Color = Hover and Color3.new(1,1,1) or Color3.fromRGB(180,180,180)}):Play()
+        end
+    end)
+
     UIS.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            if MouseOver(Vector2.new(XPos, YPos), Vector2.new(90, 15)) then
+            if IsMouseOver(Vector2.new(XPos, YPos), Vector2.new(95, 16)) then
                 Toggle.State = not Toggle.State
-                Status.Text = Toggle.State and "[+]" or "[-]"
-                Status.Color = Toggle.State and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 50)
+                Indicator.Text = Toggle.State and "[+]" or "[-]"
+                Indicator.Color = Toggle.State and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 50)
                 
                 Luminaia.Flags[flag] = Toggle.State
                 callback(Toggle.State)
+                
+                -- Pulse Effect on Toggle
+                Indicator.Size = 16
+                task.wait(0.05)
+                Indicator.Size = 13
             end
         end
     end)
@@ -341,53 +351,69 @@ end
 
 -- [[ BUTTON COMPONENT ]] --
 function Window:AddButton(text, callback)
-    local Button = {Drawings = {}}
+    local Button = {Drawings = {}, Pressing = false}
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
     local XPos = self.Drawings.Main.Position.X
     
-    local BtnFrame = Draw("Square", {
-        Size = Vector2.new(80, 16),
+    local Frame = Luminaia.Draw("Square", {
+        Size = Vector2.new(85, 18),
         Position = Vector2.new(XPos + 5, YPos),
-        Color = Color3.fromRGB(30, 30, 30),
+        Color = Color3.fromRGB(25, 25, 25),
         Filled = true,
-        Visible = true,
-        Thickness = 1,
-        ZIndex = 6
+        Visible = false,
+        ZIndex = 15
     })
     
-    local BtnText = Draw("Text", {
+    local Outline = Luminaia.Draw("Square", {
+        Size = Frame.Size,
+        Position = Frame.Position,
+        Color = Color3.fromRGB(50, 50, 50),
+        Filled = false,
+        Visible = false,
+        Thickness = 1,
+        ZIndex = 16
+    })
+
+    local BtnText = Luminaia.Draw("Text", {
         Text = text,
         Size = 12,
         Center = true,
-        Position = BtnFrame.Position + Vector2.new(40, 2),
-        Visible = true,
+        Position = Frame.Position + Vector2.new(42, 2),
+        Visible = false,
         Color = Color3.new(1, 1, 1),
         Outline = true,
-        ZIndex = 7
+        ZIndex = 17
     })
 
-    Button.Drawings = {BtnFrame, BtnText}
+    Button.Drawings = {Frame, Outline, BtnText}
 
+    -- [[ CLICK ANIMATION ]] --
     UIS.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            if MouseOver(BtnFrame.Position, BtnFrame.Size) then
-                -- Visual Feedback (Quick Flash)
-                BtnFrame.Color = Color3.fromRGB(60, 60, 60)
-                task.wait(0.1)
-                BtnFrame.Color = Color3.fromRGB(30, 30, 30)
+            if IsMouseOver(Frame.Position, Frame.Size) then
+                -- Visual Feedback
+                Frame.Position = Frame.Position + Vector2.new(0, 1)
+                BtnText.Position = BtnText.Position + Vector2.new(0, 1)
+                Frame.Color = Color3.fromRGB(40, 40, 40)
+                
                 callback()
+                
+                task.wait(0.1)
+                Frame.Position = Frame.Position - Vector2.new(0, 1)
+                BtnText.Position = BtnText.Position - Vector2.new(0, 1)
+                Frame.Color = Color3.fromRGB(25, 25, 25)
             end
         end
     end)
 
-    self.YOffset = self.YOffset + 22
+    self.YOffset = self.YOffset + 24
     table.insert(self.Elements, Button)
     return Button
 end
 
 -- [ END OF PART 3 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
+    LUMINAIA UI FRAMEWORK v1.1
     Part 4: Precision Sliders & Keybind Listeners
 --]]
 
@@ -402,47 +428,61 @@ function Window:AddSlider(text, min, max, default, flag, callback)
     }
 
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
-    local XPos = self.Drawings.Main.Position.X + 8
+    local XPos = self.Drawings.Main.Position.X + 10
     
-    local Label = Draw("Text", {
-        Text = text .. ": " .. tostring(Slider.Value),
+    -- Main Title for Slider
+    local Label = Luminaia.Draw("Text", {
+        Text = text,
         Size = 12,
-        Color = Color3.new(1, 1, 1),
+        Color = Color3.fromRGB(180, 180, 180),
         Position = Vector2.new(XPos, YPos),
-        Visible = true,
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 15
     })
 
-    local SliderBG = Draw("Square", {
-        Size = Vector2.new(74, 4),
-        Position = Vector2.new(XPos, YPos + 15),
+    -- Value Display (Shifted Right)
+    local ValLabel = Luminaia.Draw("Text", {
+        Text = tostring(Slider.Value),
+        Size = 11,
+        Color = Luminaia.Accent,
+        Position = Vector2.new(XPos + 65, YPos + 1),
+        Visible = false,
+        Outline = true,
+        ZIndex = 16
+    })
+
+    -- Background Bar
+    local BarBG = Luminaia.Draw("Square", {
+        Size = Vector2.new(75, 4),
+        Position = Vector2.new(XPos, YPos + 16),
         Color = Color3.fromRGB(30, 30, 30),
         Filled = true,
-        Visible = true,
-        ZIndex = 6
+        Visible = false,
+        ZIndex = 15
     })
 
-    local SliderFill = Draw("Square", {
-        Size = Vector2.new(((Slider.Value - min) / (max - min)) * 74, 4),
-        Position = SliderBG.Position,
+    -- Interactive Fill Bar
+    local BarFill = Luminaia.Draw("Square", {
+        Size = Vector2.new(((Slider.Value - min) / (max - min)) * 75, 4),
+        Position = BarBG.Position,
         Color = Luminaia.Accent,
         Filled = true,
-        Visible = true,
-        ZIndex = 7
+        Visible = false,
+        ZIndex = 16
     })
 
-    Slider.Drawings = {Label, SliderBG, SliderFill}
+    Slider.Drawings = {Label, ValLabel, BarBG, BarFill}
 
-    -- SLIDER LOGIC
+    -- [[ SLIDER MATH ]] --
     local function UpdateSlider()
-        local MouseLoc = UIS:GetMouseLocation()
-        local Percent = math.clamp((MouseLoc.X - SliderBG.Position.X) / SliderBG.Size.X, 0, 1)
+        local MouseLoc = GetMousePos()
+        local Percent = math.clamp((MouseLoc.X - BarBG.Position.X) / BarBG.Size.X, 0, 1)
         local Value = math.floor(min + (max - min) * Percent)
         
         Slider.Value = Value
-        SliderFill.Size = Vector2.new(Percent * 74, 4)
-        Label.Text = text .. ": " .. tostring(Value)
+        BarFill.Size = Vector2.new(Percent * 75, 4)
+        ValLabel.Text = tostring(Value)
         
         Luminaia.Flags[flag] = Value
         callback(Value)
@@ -450,8 +490,10 @@ function Window:AddSlider(text, min, max, default, flag, callback)
 
     UIS.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            if MouseOver(SliderBG.Position - Vector2.new(0, 5), SliderBG.Size + Vector2.new(0, 10)) then
+            if IsMouseOver(BarBG.Position - Vector2.new(0, 5), BarBG.Size + Vector2.new(0, 10)) then
                 Slider.Dragging = true
+                -- Visual Feedback: Make value label pop
+                ValLabel.Size = 14
                 UpdateSlider()
             end
         end
@@ -460,6 +502,7 @@ function Window:AddSlider(text, min, max, default, flag, callback)
     UIS.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             Slider.Dragging = false
+            ValLabel.Size = 11 -- Return to normal
         end
     end)
 
@@ -483,47 +526,51 @@ function Window:AddKeybind(text, default, flag, callback)
     }
 
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
-    local XPos = self.Drawings.Main.Position.X + 8
+    local XPos = self.Drawings.Main.Position.X + 10
 
-    local Label = Draw("Text", {
+    local Label = Luminaia.Draw("Text", {
         Text = text,
         Size = 13,
-        Color = Color3.fromRGB(200, 200, 200),
+        Color = Color3.fromRGB(180, 180, 180),
         Position = Vector2.new(XPos, YPos),
-        Visible = true,
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 15
     })
 
-    local BindText = Draw("Text", {
+    -- The Key Indicator (e.g. [MB2])
+    local BindText = Luminaia.Draw("Text", {
         Text = "[" .. Bind.Key.Name:upper() .. "]",
-        Size = 13,
+        Size = 12,
         Color = Luminaia.Accent,
-        Position = Vector2.new(XPos + 55, YPos),
-        Visible = true,
+        Position = Vector2.new(XPos + 52, YPos),
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 16
     })
 
     Bind.Drawings = {Label, BindText}
+    Luminaia.Flags[flag] = Bind.Key
 
+    -- [[ KEY LISTENER LOOP ]] --
     UIS.InputBegan:Connect(function(input)
         if Bind.Binding then
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                Bind.Key = input.KeyCode
-                BindText.Text = "[" .. input.KeyCode.Name:upper() .. "]"
+            if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.MouseButton2 then
+                local NewKey = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or Enum.KeyCode.MouseButton2
+                Bind.Key = NewKey
+                BindText.Text = "[" .. NewKey.Name:upper() .. "]"
                 Bind.Binding = false
                 BindText.Color = Luminaia.Accent
-                Luminaia.Flags[flag] = input.KeyCode
+                Luminaia.Flags[flag] = NewKey
             end
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            if MouseOver(Vector2.new(XPos, YPos), Vector2.new(80, 15)) then
+            if IsMouseOver(Vector2.new(XPos, YPos), Vector2.new(85, 15)) then
                 Bind.Binding = true
                 BindText.Text = "[...]"
-                BindText.Color = Color3.new(1, 1, 0)
+                BindText.Color = Color3.new(1, 1, 0) -- Flashing Yellow
             end
         elseif input.KeyCode == Bind.Key and not Bind.Binding then
-            callback() -- Trigger bind
+            callback() -- Trigger the cheat action
         end
     end)
 
@@ -534,126 +581,124 @@ end
 
 -- [ END OF PART 4 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 5: Solscite-Style Dropdowns & Tab Logic
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 5: Animated Multi-Select Dropdowns
 --]]
 
 -- [[ DROPDOWN COMPONENT ]] --
-function Window:AddDropdown(text, options, default, flag, callback)
+function Window:AddDropdown(text, list, default, flag, callback)
     local Dropdown = {
-        Options = options,
-        Selected = default or options[1],
+        List = list,
+        Selected = default or list[1],
         Open = false,
-        Drawings = {},
         OptionDrawings = {},
-        YSize = 0
+        Drawings = {}
     }
 
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
-    local XPos = self.Drawings.Main.Position.X + 8
+    local XPos = self.Drawings.Main.Position.X + 10
 
-    -- The Header of the Dropdown
-    local Label = Draw("Text", {
+    -- Label for the Dropdown
+    local Label = Luminaia.Draw("Text", {
         Text = text,
         Size = 12,
         Color = Color3.fromRGB(180, 180, 180),
         Position = Vector2.new(XPos, YPos),
-        Visible = true,
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 15
     })
 
-    local Box = Draw("Square", {
-        Size = Vector2.new(74, 16),
+    -- The Interaction Box
+    local Box = Luminaia.Draw("Square", {
+        Size = Vector2.new(75, 16),
         Position = Vector2.new(XPos, YPos + 15),
-        Color = Color3.fromRGB(25, 25, 25),
+        Color = Color3.fromRGB(20, 20, 20),
         Filled = true,
-        Visible = true,
-        Thickness = 1,
-        ZIndex = 6
+        Visible = false,
+        ZIndex = 15
     })
 
-    local SelectedText = Draw("Text", {
-        Text = Dropdown.Selected,
-        Size = 12,
-        Center = true,
-        Position = Box.Position + Vector2.new(37, 2),
-        Visible = true,
+    local BoxOutline = Luminaia.Draw("Square", {
+        Size = Box.Size,
+        Position = Box.Position,
+        Color = Color3.fromRGB(45, 45, 45),
+        Filled = false,
+        Visible = false,
+        ZIndex = 16
+    })
+
+    -- Selected Text with Arrow [v]
+    local SelectedTxt = Luminaia.Draw("Text", {
+        Text = Dropdown.Selected .. " [v]",
+        Size = 11,
         Color = Luminaia.Accent,
+        Position = Box.Position + Vector2.new(5, 2),
+        Visible = false,
         Outline = true,
-        ZIndex = 7
+        ZIndex = 17
     })
 
-    Dropdown.Drawings = {Label, Box, SelectedText}
+    Dropdown.Drawings = {Label, Box, BoxOutline, SelectedTxt}
+    Luminaia.Flags[flag] = Dropdown.Selected
 
     -- [[ OPEN/CLOSE LOGIC ]] --
-    function Dropdown:Toggle()
-        self.Open = not self.Open
+    local function ToggleDropdown()
+        Dropdown.Open = not Dropdown.Open
+        SelectedTxt.Text = Dropdown.Open and Dropdown.Selected .. " [^]" or Dropdown.Selected .. " [v]"
         
-        -- Clean up existing option visuals
-        for _, draw in pairs(self.OptionDrawings) do
-            draw:Remove()
-        end
-        self.OptionDrawings = {}
+        -- Cleanup old options if they exist
+        for _, opt in pairs(Dropdown.OptionDrawings) do opt:Remove() end
+        Dropdown.OptionDrawings = {}
 
-        if self.Open then
-            -- Tell the Window to close other active dropdowns
-            Window:ManageSpace(self)
-            
-            for i, opt in pairs(self.Options) do
-                local OptBox = Draw("Square", {
-                    Size = Vector2.new(74, 16),
+        if Dropdown.Open then
+            for i, val in pairs(Dropdown.List) do
+                local OptBox = Luminaia.Draw("Square", {
+                    Size = Vector2.new(75, 16),
                     Position = Box.Position + Vector2.new(0, i * 16),
-                    Color = Color3.fromRGB(20, 20, 20),
+                    Color = (val == Dropdown.Selected) and Color3.fromRGB(30, 30, 30) or Color3.fromRGB(15, 15, 15),
                     Filled = true,
                     Visible = true,
-                    ZIndex = 10
+                    ZIndex = 50 -- Bring to front
                 })
                 
-                local OptTxt = Draw("Text", {
-                    Text = opt,
-                    Size = 12,
-                    Center = true,
-                    Position = OptBox.Position + Vector2.new(37, 2),
+                local OptTxt = Luminaia.Draw("Text", {
+                    Text = tostring(val),
+                    Size = 11,
+                    Color = (val == Dropdown.Selected) and Luminaia.Accent or Color3.new(1,1,1),
+                    Position = OptBox.Position + Vector2.new(5, 2),
                     Visible = true,
-                    Color = (opt == self.Selected and Luminaia.Accent or Color3.new(1, 1, 1)),
                     Outline = true,
-                    ZIndex = 11
+                    ZIndex = 51
                 })
-                
-                table.insert(self.OptionDrawings, OptBox)
-                table.insert(self.OptionDrawings, OptTxt)
+
+                table.insert(Dropdown.OptionDrawings, OptBox)
+                table.insert(Dropdown.OptionDrawings, OptTxt)
+
+                -- CLICKING AN OPTION
+                task.spawn(function()
+                    local connection
+                    connection = UIS.InputBegan:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 and Dropdown.Open then
+                            if IsMouseOver(OptBox.Position, OptBox.Size) then
+                                Dropdown.Selected = val
+                                SelectedTxt.Text = val .. " [v]"
+                                Luminaia.Flags[flag] = val
+                                callback(val)
+                                ToggleDropdown() -- Close after select
+                                connection:Disconnect()
+                            end
+                        end
+                    end)
+                end)
             end
         end
     end
 
-    function Dropdown:Close()
-        if self.Open then
-            self.Open = false
-            for _, draw in pairs(self.OptionDrawings) do draw.Visible = false end
-        end
-    end
-
-    -- Input Handler for Dropdown
     UIS.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            -- Clicking the Main Box
-            if MouseOver(Box.Position, Box.Size) then
-                Dropdown:Toggle()
-            end
-            
-            -- Clicking Options
-            if Dropdown.Open then
-                for i, opt in pairs(Dropdown.Options) do
-                    local OptPos = Box.Position + Vector2.new(0, i * 16)
-                    if MouseOver(OptPos, Vector2.new(74, 16)) then
-                        Dropdown.Selected = opt
-                        SelectedText.Text = opt
-                        Luminaia.Flags[flag] = opt
-                        callback(opt)
-                        Dropdown:Toggle() -- Close after select
-                    end
-                end
+            if IsMouseOver(Box.Position, Box.Size) then
+                ToggleDropdown()
             end
         end
     end)
@@ -665,169 +710,171 @@ end
 
 -- [ END OF PART 5 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 6: Dynamic Color Pickers & Accent Controls
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 6: Dynamic Color Pickers & Live Theme Swapping
 --]]
 
 -- [[ COLOR PICKER COMPONENT ]] --
 function Window:AddColorPicker(text, default, flag, callback)
     local Picker = {
-        Color = default or Color3.fromRGB(255, 255, 255),
+        Color = default or Color3.fromRGB(255, 100, 200),
         Open = false,
         Drawings = {},
         PickerDrawings = {}
     }
 
     local YPos = self.Drawings.Main.Position.Y + self.YOffset
-    local XPos = self.Drawings.Main.Position.X + 8
+    local XPos = self.Drawings.Main.Position.X + 10
 
-    local Label = Draw("Text", {
+    -- Label
+    local Label = Luminaia.Draw("Text", {
         Text = text,
-        Size = 12,
-        Color = Color3.fromRGB(200, 200, 200),
+        Size = 13,
+        Color = Color3.fromRGB(180, 180, 180),
         Position = Vector2.new(XPos, YPos),
-        Visible = true,
+        Visible = false,
         Outline = true,
-        ZIndex = 6
+        ZIndex = 15
     })
 
-    -- The small preview box on the right
-    local Preview = Draw("Square", {
-        Size = Vector2.new(16, 10),
-        Position = Vector2.new(XPos + 58, YPos + 2),
+    -- The "Preview" Box (BOLD & THICK)
+    local Preview = Luminaia.Draw("Square", {
+        Size = Vector2.new(18, 10),
+        Position = Vector2.new(XPos + 62, YPos + 2),
         Color = Picker.Color,
         Filled = true,
-        Visible = true,
-        Thickness = 1,
-        ZIndex = 7
+        Visible = false,
+        ZIndex = 16
     })
 
-    Picker.Drawings = {Label, Preview}
+    local PreviewOutline = Luminaia.Draw("Square", {
+        Size = Preview.Size,
+        Position = Preview.Position,
+        Color = Color3.new(1, 1, 1),
+        Filled = false,
+        Thickness = 1,
+        Visible = false,
+        ZIndex = 17
+    })
 
-    -- [[ PICKER MENU LOGIC ]] --
-    function Picker:Toggle()
-        self.Open = not self.Open
-        for _, v in pairs(self.PickerDrawings) do v:Remove() end
-        self.PickerDrawings = {}
+    Picker.Drawings = {Label, Preview, PreviewOutline}
+    Luminaia.Flags[flag] = Picker.Color
 
-        if self.Open then
-            Window:ManageSpace(self) -- Close other dropdowns/pickers
+    -- [[ PICKER GRID LOGIC ]] --
+    local function TogglePicker()
+        Picker.Open = not Picker.Open
+        
+        -- Cleanup
+        for _, d in pairs(Picker.PickerDrawings) do d:Remove() end
+        Picker.PickerDrawings = {}
 
-            -- A simple 3x3 grid of preset colors to fit the 90px width
-            local Colors = {
-                Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 255, 0), Color3.fromRGB(0, 0, 255),
-                Color3.fromRGB(255, 255, 0), Color3.fromRGB(255, 0, 255), Color3.fromRGB(0, 255, 255),
-                Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 150, 150), Color3.fromRGB(50, 50, 50)
-            }
-
-            local GridBG = Draw("Square", {
-                Size = Vector2.new(74, 74),
-                Position = Preview.Position + Vector2.new(-58, 15),
-                Color = Color3.fromRGB(20, 20, 20),
+        if Picker.Open then
+            -- Create a simplified 40x40 Hue Map
+            local GridPos = Preview.Position + Vector2.new(25, 0)
+            
+            local GridBG = Luminaia.Draw("Square", {
+                Size = Vector2.new(60, 60),
+                Position = GridPos,
+                Color = Color3.fromRGB(15, 15, 15),
                 Filled = true,
                 Visible = true,
-                ZIndex = 15
+                ZIndex = 100
             })
-            table.insert(self.PickerDrawings, GridBG)
+            table.insert(Picker.PickerDrawings, GridBG)
 
-            for i, col in pairs(Colors) do
-                local r = math.floor((i-1) / 3)
-                local c = (i-1) % 3
-                
-                local ColBtn = Draw("Square", {
-                    Size = Vector2.new(20, 20),
-                    Position = GridBG.Position + Vector2.new(4 + (c * 23), 4 + (r * 23)),
-                    Color = col,
+            -- Creating the Rainbow Strip
+            for i = 0, 60 do
+                local HueLine = Luminaia.Draw("Square", {
+                    Size = Vector2.new(60, 1),
+                    Position = GridPos + Vector2.new(0, i),
+                    Color = Color3.fromHSV(i/60, 1, 1),
                     Filled = true,
                     Visible = true,
-                    ZIndex = 16
+                    ZIndex = 101
                 })
-                table.insert(self.PickerDrawings, ColBtn)
+                table.insert(Picker.PickerDrawings, HueLine)
             end
-        end
-    end
 
-    function Picker:Close()
-        self.Open = false
-        for _, v in pairs(self.PickerDrawings) do v.Visible = false end
+            -- Click Logic for the Rainbow
+            task.spawn(function()
+                while Picker.Open and Luminaia.Toggled do
+                    if UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                        local m = GetMousePos()
+                        if IsMouseOver(GridPos, Vector2.new(60, 60)) then
+                            local Percent = math.clamp((m.Y - GridPos.Y) / 60, 0, 1)
+                            local NewColor = Color3.fromHSV(Percent, 1, 1)
+                            
+                            Picker.Color = NewColor
+                            Preview.Color = NewColor
+                            Luminaia.Flags[flag] = NewColor
+                            callback(NewColor)
+                        end
+                    end
+                    RS.RenderStepped:Wait()
+                end
+            end)
+        end
     end
 
     UIS.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and Luminaia.Toggled and self.Visible then
-            -- Click Preview to Open
-            if MouseOver(Preview.Position, Preview.Size) or MouseOver(Label.Position, Vector2.new(50, 12)) then
-                Picker:Toggle()
-            end
-
-            -- Click Grid to Select
-            if Picker.Open then
-                local Colors = {
-                    Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 255, 0), Color3.fromRGB(0, 0, 255),
-                    Color3.fromRGB(255, 255, 0), Color3.fromRGB(255, 0, 255), Color3.fromRGB(0, 255, 255),
-                    Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 150, 150), Color3.fromRGB(50, 50, 50)
-                }
-                local GridStart = Preview.Position + Vector2.new(-58, 15)
-                
-                for i, col in pairs(Colors) do
-                    local r = math.floor((i-1) / 3)
-                    local c = (i-1) % 3
-                    local BtnPos = GridStart + Vector2.new(4 + (c * 23), 4 + (r * 23))
-                    
-                    if MouseOver(BtnPos, Vector2.new(20, 20)) then
-                        Picker.Color = col
-                        Preview.Color = col
-                        Luminaia.Accent = col -- Global Accent Change!
-                        Luminaia.Flags[flag] = col
-                        callback(col)
-                        Picker:Toggle()
-                    end
-                end
+            if IsMouseOver(Preview.Position, Preview.Size) then
+                TogglePicker()
             end
         end
     end)
 
-    self.YOffset = self.YOffset + 20
+    self.YOffset = self.YOffset + 18
     table.insert(self.Elements, Picker)
     return Picker
 end
 
 -- [ END OF PART 6 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 7: Auto-Config & JSON Persistence
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 7: Auto-Config & JSON Persistence Logic
 --]]
 
 local HttpService = game:GetService("HttpService")
 
--- [[ CONFIG DIRECTORY SETUP ]] --
+-- [[ FOLDER INITIALIZATION ]] --
 if not isfolder("Luminaia_Configs") then
     makefolder("Luminaia_Configs")
 end
 
--- [[ SAVE LOGIC ]] --
+-- [[ CONFIG SAVING ]] --
 function Luminaia:SaveConfig(name)
     local Data = {}
+    
     for flag, value in pairs(self.Flags) do
-        -- Convert Color3 to Table for JSON compatibility
+        -- Handle complex types for JSON compatibility
         if typeof(value) == "Color3" then
-            Data[flag] = {value.r, value.g, value.b}
+            Data[flag] = {R = value.r, G = value.g, B = value.b, Type = "Color3"}
         elseif typeof(value) == "EnumItem" then
-            Data[flag] = tostring(value)
+            Data[flag] = {Name = value.Name, Type = "Enum"}
         else
             Data[flag] = value
         end
     end
     
     local JSON = HttpService:JSONEncode(Data)
-    writefile("Luminaia_Configs/" .. name .. ".json", JSON)
-    self:Notify("Config '" .. name .. "' Saved!")
+    local Success, Error = pcall(function()
+        writefile("Luminaia_Configs/" .. name .. ".json", JSON)
+    end)
+    
+    if Success then
+        self:Notify("CONFIG '" .. name:upper() .. "' SAVED")
+    else
+        self:Notify("SAVE FAILED: " .. tostring(Error))
+    end
 end
 
--- [[ LOAD LOGIC ]] --
+-- [[ CONFIG LOADING ]] --
 function Luminaia:LoadConfig(name)
     local Path = "Luminaia_Configs/" .. name .. ".json"
+    
     if not isfile(Path) then 
-        self:Notify("Config not found!") 
+        self:Notify("CONFIG NOT FOUND") 
         return 
     end
     
@@ -835,69 +882,70 @@ function Luminaia:LoadConfig(name)
     local Data = HttpService:JSONDecode(Raw)
     
     for flag, value in pairs(Data) do
-        -- Logic to apply loaded values back to UI elements
-        self.Flags[flag] = value
-        -- Note: Real-time UI updating for loaded configs 
-        -- will be finalized in the Phase 9 "Registry Refresh".
+        if type(value) == "table" and value.Type == "Color3" then
+            self.Flags[flag] = Color3.new(value.R, value.G, value.B)
+        elseif type(value) == "table" and value.Type == "Enum" then
+            -- Logic to resolve Enum names back to KeyCodes
+            self.Flags[flag] = Enum.KeyCode[value.Name]
+        else
+            self.Flags[flag] = value
+        end
     end
     
-    self:Notify("Config '" .. name .. "' Loaded!")
+    self:Notify("CONFIG '" .. name:upper() .. "' LOADED")
+    -- Note: Phase 9 handles the visual "Refresh" of the UI elements
 end
 
--- [[ ADD CONFIG SECTION TO A WINDOW ]] --
--- Usually, you'd put this in a "Settings" window
+-- [[ CONFIG SECTION HELPER ]] --
+-- Adds quick Save/Load buttons to any pillar (usually 'Settings')
 function Window:AddConfigSection()
-    local ConfigName = "default"
+    local CurrentName = "default"
     
-    self:AddButton("Save Default", function()
-        Luminaia:SaveConfig("default")
+    self:AddButton("Save Config", function()
+        Luminaia:SaveConfig(CurrentName)
     end)
     
-    self:AddButton("Load Default", function()
-        Luminaia:LoadConfig("default")
+    self:AddButton("Load Config", function()
+        Luminaia:LoadConfig(CurrentName)
     end)
 end
 
 -- [ END OF PART 7 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 8: Smooth Transitions & Input Buffering
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 8: Smooth Transitions & Mouse Z-Logic
 --]]
 
--- [[ SMOOTH FADE LOGIC ]] --
--- This handles the transition when opening/closing the menu
-function Luminaia:SetToggled(state)
-    self.Toggled = state
-    local targetTrans = state and 0.85 or 0
-    local targetTextTrans = state and 1 or 0
-    
-    -- Animate Blur
-    if Lighting:FindFirstChild("LuminaiaBlur") then
-        TS:Create(Lighting.LuminaiaBlur, TweenInfo.new(0.3), {Size = state and 20 or 0}):Play()
-        Lighting.LuminaiaBlur.Enabled = true -- Keep enabled for the transition
-    end
+-- [[ SMOOTH TRANSITION ENGINE ]] --
+-- This handles the fading of all 12 pillars simultaneously
+function Luminaia:AnimateToggle(state)
+    local TargetTransparency = state and 0.9 or 0
+    local TargetTextAlpha = state and 1 or 0
+    local Speed = 0.15 -- Fast but buttery smooth
 
-    -- Animate Windows and Elements
     task.spawn(function()
         for i = 1, 10 do
-            local alpha = state and (i / 10) or (1 - (i / 10))
-            for _, win in pairs(self.Windows) do
-                -- Fade Pillar
-                win.Drawings.Main.Transparency = alpha * 0.85
-                win.Drawings.Outline.Transparency = alpha * 0.4
-                win.Drawings.Header.Transparency = alpha
-                win.Drawings.Line.Transparency = alpha
-                win.Drawings.Title.Transparency = alpha
+            local Alpha = state and (i / 10) or (1 - (i / 10))
+            
+            for _, Win in pairs(self.Windows) do
+                -- Fade Pillar Bases
+                Win.Drawings.Main.Transparency = Alpha * 0.9
+                Win.Drawings.Outline.Transparency = Alpha * 0.5
+                Win.Drawings.Header.Transparency = Alpha
+                Win.Drawings.Accent.Transparency = Alpha
                 
-                -- Fade Elements
-                for _, element in pairs(win.Elements) do
-                    for _, drawing in pairs(element.Drawings) do
-                        drawing.Transparency = alpha
+                -- Fade The BOLD Titles
+                Win.Drawings.Title.Transparency = Alpha
+                
+                -- Fade Every Element Inside
+                for _, Element in pairs(Win.Elements) do
+                    for _, DrawObj in pairs(Element.Drawings) do
+                        DrawObj.Transparency = Alpha
                     end
-                    -- If a dropdown is open, fade its options too
-                    if element.OptionDrawings then
-                        for _, optDraw in pairs(element.OptionDrawings) do
-                            optDraw.Transparency = alpha
+                    -- Special handling for open dropdowns
+                    if Element.OptionDrawings then
+                        for _, Opt in pairs(Element.OptionDrawings) do
+                            Opt.Transparency = Alpha
                         end
                     end
                 end
@@ -905,106 +953,121 @@ function Luminaia:SetToggled(state)
             RS.RenderStepped:Wait()
         end
         
-        -- Final visibility lock
+        -- Hard lock visibility after fade
         if not state then
-            for _, win in pairs(self.Windows) do win:SetVisible(false) end
-            if Lighting:FindFirstChild("LuminaiaBlur") then Lighting.LuminaiaBlur.Enabled = false end
-        else
-            for _, win in pairs(self.Windows) do win:SetVisible(true) end
+            for _, Win in pairs(self.Windows) do Win:SetVisible(false) end
         end
     end)
 end
 
--- [[ INPUT BUFFERING ]] --
--- Prevents "click-through" where clicking a button triggers things behind it
-Luminaia.InputOpen = true
-UIS.InputBegan:Connect(function(input, gpe)
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        Luminaia:SetToggled(not Luminaia.Toggled)
-    end
+-- [[ INPUT BUFFERING (Z-PASS) ]] --
+-- This ensures that only the TOPMOST element gets clicked.
+Luminaia.IsIntersecting = false
 
-    -- Mouse Lock logic for when menu is open
-    if Luminaia.Toggled then
-        -- Optional: You can add logic here to unlock the mouse for certain executors
+local function CheckIntersections()
+    local MousePos = GetMousePos()
+    local Found = false
+    
+    -- Check Windows from front to back
+    for i = #Luminaia.Windows, 1, -1 do
+        local Win = Luminaia.Windows[i]
+        if Win.Visible and IsMouseOver(Win.Drawings.Header.Position, Win.Drawings.Header.Size) then
+            Found = true
+            break
+        end
     end
+    Luminaia.IsIntersecting = Found
+end
+
+-- Hook into the Part 1 Toggle Logic
+Luminaia:Connect("OnToggle", function(state)
+    Luminaia:AnimateToggle(state)
 end)
 
--- [[ DYNAMIC TEXT WRAPPER ]] --
--- Ensures names don't bleed out of the 90px width
-local function ClampText(textObj, maxWidth)
-    local rawText = textObj.Text
-    while textObj.TextBounds.X > maxWidth and #textObj.Text > 3 do
+-- [[ DYNAMIC TEXT CLAMPING ]] --
+-- Prevents long names from bleeding out of the 95px pillars
+function Luminaia:ClampText(textObj, maxWidth)
+    local OriginalText = textObj.Text
+    while textObj.TextBounds.X > (maxWidth - 10) and #textObj.Text > 3 do
         textObj.Text = string.sub(textObj.Text, 1, #textObj.Text - 1)
     end
-    if textObj.Text ~= rawText then
+    if textObj.Text ~= OriginalText then
         textObj.Text = textObj.Text .. ".."
     end
 end
 
 -- [ END OF PART 8 ] --
 --[[
-    LUMINAIA UI FRAMEWORK v1.0
-    Part 9: Final Initialization & Lifecycle
+    LUMINAIA UI FRAMEWORK v1.1
+    Part 9: Final Initialization & Garbage Collection
 --]]
 
--- [[ REGISTRY REFRESH ]] --
--- This ensures that if the screen resolution changes, 
--- the 12 pillars stay perfectly centered.
+-- [[ SCREEN RESIZE REFRESH ]] --
+-- This ensures that if the user changes resolution, 
+-- the 12 pillars stay perfectly centered in their 2x6 grid.
 workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local Screen = workspace.CurrentCamera.ViewportSize
-    local totalWidth = (6 * 90) + (5 * 15)
-    local startXBase = (Screen.X / 2) - (totalWidth / 2)
+    local TotalWidth = (6 * 95) + (5 * 15)
+    local StartXBase = (Screen.X / 2) - (TotalWidth / 2)
     
     for idx, win in pairs(Luminaia.Windows) do
         local col = (idx - 1) % 6
         local row = math.floor((idx - 1) / 6)
-        local newX = startXBase + (col * 105)
-        local newY = (Screen.Y / 2) - (row == 0 and 510 or -10)
+        local newX = StartXBase + (col * 110)
+        local newY = (Screen.Y / 2) - (row == 0 and 520 or -20)
         
-        -- Update Pillar Position
+        -- Shift Pillar and Elements
         local oldPos = win.Drawings.Main.Position
         local diff = Vector2.new(newX, newY) - oldPos
         
         win.Drawings.Main.Position = Vector2.new(newX, newY)
         win.Drawings.Outline.Position = win.Drawings.Main.Position
         win.Drawings.Header.Position = win.Drawings.Main.Position
-        win.Drawings.Line.Position = win.Drawings.Header.Position + Vector2.new(0, 23)
-        win.Drawings.Title.Position = win.Drawings.Header.Position + Vector2.new(45, 6)
+        win.Drawings.Accent.Position = win.Drawings.Header.Position + Vector2.new(0, 33)
+        win.Drawings.Title.Position = win.Drawings.Header.Position + Vector2.new(47, 10)
         
         -- Update All Elements within the Pillar
         for _, element in pairs(win.Elements) do
             for _, drawing in pairs(element.Drawings) do
                 drawing.Position = drawing.Position + diff
             end
-            if element.OptionDrawings then
-                for _, opt in pairs(element.OptionDrawings) do
-                    opt.Position = opt.Position + diff
-                end
-            end
         end
     end
 end)
 
--- [[ AUTO-EXECUTE ANIMATION ]] --
+-- [[ UNLOAD / CLEANUP ]] --
+-- Essential for 100% UNC clients to prevent crashing on re-exec
+Luminaia.Unload = function()
+    Luminaia:Notify("UNLOADING...")
+    for _, win in pairs(Luminaia.Windows) do
+        for _, draw in pairs(win.Drawings) do draw:Remove() end
+        for _, el in pairs(win.Elements) do
+            for _, d in pairs(el.Drawings) do d:Remove() end
+        end
+    end
+    if Lighting:FindFirstChild("LuminaiaBlur") then
+        Lighting.LuminaiaBlur:Destroy()
+    end
+    script:Destroy()
+end
+
+-- [[ THE FINAL BOOT ]] --
 task.spawn(function()
-    Luminaia:Notify("LUMINAIA Framework Loaded Successfully")
     print([[
-  _      _    _  __  __  _____  _   _    _     _____     _       
- | |    | |  | ||  \/  ||_   _|| \ | |  / \   |_   _|   / \   
- | |    | |  | || |\/| |  | |  |  \| | / _ \    | |    / _ \   
- | |___ | |__| || |  | | _| |_ | |\  |/ ___ \  _| |_  / ___ \    
- |_____| \____/ |_|  |_||_____||_| \_/_/   \_\|_____|/_/   \_\ 
-    
-    LUMINAIA UI LIB v1.0 - BY PRIZMM
-    Status: 100% UNC (LX63 Optimized)
+  _      _    _  __  __  _____  _   _    _     _____     _     
+ | |    | |  | ||  \/  ||_   _|| \ | |  / \   |_   _|   / \
+ | |    | |  | || |\/| |  | |  |  \| | / _ \    | |    / _ \
+ | |___ | |__| || |  | | _| |_ | |\  |/ ___ \  _| |_  / ___ \
+ |_____| \____/ |_|  |_||_____||_| \_/_/   \_\|_____|/_/   \_\
+                                                                 
+          [ THE APEX OF EXTERNAL UI | BY PRIZMM ]
+          STATUS: 100% UNC | LX63 OPTIMIZED
     ]])
     
-    -- Start with a clean fade-in
-    Luminaia:SetToggled(true)
+    Luminaia:Notify("V1.1 LOADED | PRESS RIGHT SHIFT")
 end)
 
--- [[ FINAL BOOT ]] --
--- This returns the library object to the loadstring caller
+-- [[ EXPORT ]] --
 getgenv().Luminaia = Luminaia
 return Luminaia
 
